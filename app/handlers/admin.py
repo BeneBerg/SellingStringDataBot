@@ -19,8 +19,9 @@ from aiogram.types import (
 
 
 router = Router()
-
-ADMINS = [1033823491]
+ADMIN_IDS = os.getenv("ADMIN_IDS")
+ADMIN_IDS = int(ADMIN_IDS)
+ADMINS = [ADMIN_IDS]
 
 @router.message(Command("admin"))
 async def admin_panel(message: Message):

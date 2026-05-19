@@ -143,7 +143,7 @@ async def check_payment(callback: CallbackQuery):
         return
 
     invoice = items[0]
-    status = "paid"
+    status = invoice["status"]
 
     # ВАЖНО:
     # для реальной работы должно быть invoice["status"]
