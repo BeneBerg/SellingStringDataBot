@@ -34,10 +34,7 @@ async def set_bot_commands():
             command="start",
             description="Запустить бота"
         ),
-        BotCommand(
-            command="admin",
-            description="Админ-панель"
-        )
+       
     ]
 
     await bot.set_my_commands(commands)

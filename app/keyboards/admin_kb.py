@@ -1,46 +1,35 @@
 from aiogram.types import (
-    InlineKeyboardMarkup,
-    InlineKeyboardButton
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove
 )
 
 
-admin_keyboard = InlineKeyboardMarkup(
-    inline_keyboard=[
+admin_reply_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
         [
-            InlineKeyboardButton(
-                text="📊 Статистика",
-                callback_data="admin_stats"
-            )
+            KeyboardButton(text="📊 Статистика"),
+            KeyboardButton(text="🔑 Остаток строк")
         ],
         [
-            InlineKeyboardButton(
-                text="🔑 Остаток строк",
-                callback_data="admin_keys"
-            )
+            KeyboardButton(text="💲 Цена за 1 строку"),
+            KeyboardButton(text="💲 Цена за 10 строк")
         ],
         [
-            InlineKeyboardButton(
-                text="💲 Цена за 1 строку",
-                callback_data="admin_change_price_1"
-            )
+            KeyboardButton(text="📝 Изменить приветствие"),
+            KeyboardButton(text="📂 Загрузить строки")
         ],
         [
-            InlineKeyboardButton(
-                text="💲 Цена за 10 строк",
-                callback_data="admin_change_price_10"
-            )
+            KeyboardButton(text="📄 Изменить оферту"),
+            KeyboardButton(text="📘 Изменить инструкцию")
         ],
         [
-            InlineKeyboardButton(
-                text="📝 Изменить приветствие",
-                callback_data="admin_change_text"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📂 Загрузить строки",
-                callback_data="admin_upload_keys"
-            )
+            KeyboardButton(text="❌ Закрыть админку")
         ]
-    ]
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Выберите действие"
 )
+
+
+remove_admin_keyboard = ReplyKeyboardRemove()

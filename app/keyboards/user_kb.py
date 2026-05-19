@@ -19,6 +19,25 @@ buy_keyboard = InlineKeyboardMarkup(
 )
 
 
+def offer_keyboard(quantity: int):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Принимаю",
+                    callback_data=f"accept_offer_{quantity}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="cancel_offer"
+                )
+            ]
+        ]
+    )
+
+
 def check_payment_keyboard(invoice_id: int, quantity: int):
     return InlineKeyboardMarkup(
         inline_keyboard=[

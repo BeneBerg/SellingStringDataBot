@@ -1,6 +1,10 @@
+import os
+
 from aiogram import Router
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart
+from app.keyboards.admin_kb import admin_reply_keyboard
+
 
 from app.services.database import (
     add_user,
@@ -21,9 +25,17 @@ from app.services.keys import get_keys
 
 from app.keyboards.user_kb import (
     buy_keyboard,
+    offer_keyboard,
     check_payment_keyboard
 )
 
+ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
+
+ADMINS = [
+    int(admin_id.strip())
+    for admin_id in ADMIN_IDS_RAW.split(",")
+    if admin_id.strip()
+]
 router = Router()
 
 
@@ -44,6 +56,13 @@ async def start_handler(message: Message):
         message.from_user.username
     )
 
+    if message.from_user.id in ADMINS:
+        await message.answer(
+            "⚙️ Админ-панель открыта.\n\nВыберите действие в меню снизу.",
+            reply_markup=admin_reply_keyboard
+        )
+        return
+
     text = get_setting(
         "welcome_text",
         "Добро пожаловать.\n\nВыберите нужный вариант покупки."
@@ -58,6 +77,30 @@ async def start_handler(message: Message):
 @router.callback_query(lambda c: c.data in ["buy_1", "buy_10"])
 async def buy_handler(callback: CallbackQuery):
     quantity = int(callback.data.split("_")[1])
+
+    offer_text = get_setting(
+        "offer_text",
+        "Перед оплатой ознакомьтесь с условиями оферты."
+    )
+
+    await callback.message.answer(
+        offer_text,
+        reply_markup=offer_keyboard(quantity)
+    )
+
+    await callback.answer()
+
+@router.callback_query(lambda c: c.data == "cancel_offer")
+async def cancel_offer(callback: CallbackQuery):
+    await callback.message.answer(
+        "Покупка отменена."
+    )
+
+    await callback.answer()
+
+@router.callback_query(lambda c: c.data.startswith("accept_offer_"))
+async def accept_offer_handler(callback: CallbackQuery):
+    quantity = int(callback.data.split("_")[2])
     price = get_price_by_quantity(quantity)
 
     invoice = await create_invoice(
@@ -180,10 +223,16 @@ async def check_payment(callback: CallbackQuery):
 
     keys_text = "\n".join(keys)
 
+    instruction_text = get_setting(
+        "instruction_text",
+        "Инструкция:\n\nСкопируйте полученные данные и используйте их по назначению."
+    )
+
     await callback.message.answer(
         f"✅ Оплата подтверждена\n\n"
         f"Ваши данные:\n\n"
-        f"<code>{keys_text}</code>"
+        f"<code>{keys_text}</code>\n\n"
+        f"{instruction_text}"
     )
 
     await callback.answer()
