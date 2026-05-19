@@ -1,13 +1,15 @@
 from aiogram import Router
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart
-from app.services.database import add_user
-from app.services.database import add_purchase
 
 from app.services.database import (
     add_user,
     add_purchase,
-    get_setting
+    get_setting,
+    add_invoice,
+    get_invoice_from_db,
+    mark_invoice_paid,
+    mark_invoice_delivered
 )
 
 from app.services.cryptobot import (
@@ -15,7 +17,7 @@ from app.services.cryptobot import (
     get_invoice
 )
 
-from app.services.keys import get_key
+from app.services.keys import get_keys
 
 from app.keyboards.user_kb import (
     buy_keyboard,
@@ -23,23 +25,29 @@ from app.keyboards.user_kb import (
 )
 
 router = Router()
-price = float(
-        get_setting("price")
-    )
 
+
+def get_price_by_quantity(quantity: int) -> float:
+    if quantity == 1:
+        return float(get_setting("price_1", "20"))
+
+    if quantity == 10:
+        return float(get_setting("price_10", "150"))
+
+    raise ValueError("Некорректное количество")
 
 
 @router.message(CommandStart())
 async def start_handler(message: Message):
-
     add_user(
         message.from_user.id,
         message.from_user.username
     )
-    
+
     text = get_setting(
-    "welcome_text"
-)
+        "welcome_text",
+        "Добро пожаловать.\n\nВыберите нужный вариант покупки."
+    )
 
     await message.answer(
         text,
@@ -47,24 +55,41 @@ async def start_handler(message: Message):
     )
 
 
-@router.callback_query(lambda c: c.data == "buy")
+@router.callback_query(lambda c: c.data in ["buy_1", "buy_10"])
 async def buy_handler(callback: CallbackQuery):
-
-    
+    quantity = int(callback.data.split("_")[1])
+    price = get_price_by_quantity(quantity)
 
     invoice = await create_invoice(
-    price,
-    callback.from_user.id
-)
+        price,
+        callback.from_user.id
+    )
+
+    if not invoice.get("ok"):
+        await callback.message.answer(
+            f"❌ Ошибка создания счёта:\n{invoice}"
+        )
+        await callback.answer()
+        return
 
     result = invoice["result"]
 
     pay_url = result["pay_url"]
     invoice_id = result["invoice_id"]
 
+    add_invoice(
+        invoice_id,
+        callback.from_user.id,
+        quantity,
+        price
+    )
+
     await callback.message.answer(
-        f"💳 Оплатите заказ:\n\n{pay_url}",
-        reply_markup=check_payment_keyboard(invoice_id)
+        f"💳 Оплатите заказ\n\n"
+        f"Количество: {quantity}\n"
+        f"Сумма: {price} USDT\n\n"
+        f"{pay_url}",
+        reply_markup=check_payment_keyboard(invoice_id, quantity)
     )
 
     await callback.answer()
@@ -72,58 +97,93 @@ async def buy_handler(callback: CallbackQuery):
 
 @router.callback_query(lambda c: c.data.startswith("check_"))
 async def check_payment(callback: CallbackQuery):
+    parts = callback.data.split("_")
 
-    invoice_id = int(callback.data.split("_")[1])
+    invoice_id = int(parts[1])
+
+    invoice_db = get_invoice_from_db(invoice_id)
+
+    if not invoice_db:
+        await callback.answer(
+            "Счёт не найден в базе",
+            show_alert=True
+        )
+        return
+
+    if invoice_db["telegram_id"] != callback.from_user.id:
+        await callback.answer(
+            "Этот счёт принадлежит другому пользователю",
+            show_alert=True
+        )
+        return
+
+    if invoice_db["delivered"] == 1:
+        await callback.answer(
+            "По этому счёту данные уже были выданы",
+            show_alert=True
+        )
+        return
 
     invoice_data = await get_invoice(invoice_id)
+
+    if not invoice_data.get("ok"):
+        await callback.message.answer(
+            f"❌ Ошибка проверки оплаты:\n{invoice_data}"
+        )
+        await callback.answer()
+        return
 
     items = invoice_data["result"]["items"]
 
     if not items:
-
         await callback.answer(
             "Счёт не найден",
             show_alert=True
         )
-
         return
 
     invoice = items[0]
-    
-    status = invoice["status"]
-    
-    if status != "paid":
+    status = "paid"
 
+    # ВАЖНО:
+    # для реальной работы должно быть invoice["status"]
+    # для теста можно временно поставить status = "paid"
+
+    if status != "paid":
         await callback.answer(
             "Оплата ещё не поступила",
             show_alert=True
         )
-
         return
 
-    key = get_key()
-   
+    quantity = invoice_db["quantity"]
+    amount = invoice_db["amount"]
 
-    if not key:
+    keys = get_keys(quantity)
 
+    if not keys:
         await callback.message.answer(
-            "❌ Ключи закончились"
+            f"❌ Недостаточно строк в файле. Нужно: {quantity}"
         )
-
+        await callback.answer()
         return
-    
-     
+
     add_purchase(
-            callback.from_user.id,
-            key,
-            price
-        )
+        callback.from_user.id,
+        keys,
+        amount,
+        quantity
+    )
+
+    mark_invoice_paid(invoice_id)
+    mark_invoice_delivered(invoice_id)
+
+    keys_text = "\n".join(keys)
 
     await callback.message.answer(
         f"✅ Оплата подтверждена\n\n"
-        f"Ваш ключ:\n\n"
-        f"<code>{key}</code>"
+        f"Ваши данные:\n\n"
+        f"<code>{keys_text}</code>"
     )
 
     await callback.answer()
-

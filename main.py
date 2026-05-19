@@ -1,18 +1,19 @@
 from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from dotenv import load_dotenv
-from app.services.database import init_db
+load_dotenv()
+
 import asyncio
 import os
 
-
-
-load_dotenv()
-import asyncio
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
 
 from app.handlers.user import router as user_router
 from app.handlers.admin import router as admin_router
+from app.services.database import init_db
+
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -27,10 +28,34 @@ dp.include_router(user_router)
 dp.include_router(admin_router)
 
 
+async def set_bot_commands():
+    commands = [
+        BotCommand(
+            command="start",
+            description="Запустить бота"
+        ),
+        BotCommand(
+            command="admin",
+            description="Админ-панель"
+        )
+    ]
+
+    await bot.set_my_commands(commands)
+
+
 async def main():
     init_db()
-    await dp.start_polling(bot)
+
+    await set_bot_commands()
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Бот остановлен вручную")

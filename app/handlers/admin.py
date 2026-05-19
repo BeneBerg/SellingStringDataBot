@@ -7,7 +7,8 @@ from app.states.admin_states import AdminStates
 
 from app.services.database import (
     get_stats,
-    set_setting
+    set_setting,
+    get_setting
 )
 from aiogram import Router
 from aiogram.types import (
@@ -139,9 +140,65 @@ async def upload_keys_file(
 
     await state.clear()
 
-@router.callback_query(
-    lambda c: c.data == "admin_change_price"
-)
+@router.callback_query(lambda c: c.data in ["admin_change_price_1", "admin_change_price_10"])
+async def change_price_start(
+    callback: CallbackQuery,
+    state: FSMContext
+):
+    if callback.from_user.id not in ADMINS:
+        return
+
+    quantity = callback.data.split("_")[-1]
+
+    await state.update_data(
+        price_key=f"price_{quantity}",
+        quantity=quantity
+    )
+
+    await state.set_state(
+        AdminStates.waiting_for_price
+    )
+
+    current_price = get_setting(f"price_{quantity}", "20" if quantity == "1" else "150")
+
+    await callback.message.answer(
+        f"Введите новую цену для тарифа {quantity} шт.\n"
+        f"Текущая цена: {current_price} USDT"
+    )
+
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_for_price)
+async def change_price_save(
+    message: Message,
+    state: FSMContext
+):
+    if message.from_user.id not in ADMINS:
+        return
+
+    try:
+        price = float(message.text.replace(",", "."))
+    except ValueError:
+        await message.answer("Введите число, например: 20 или 150")
+        return
+
+    data = await state.get_data()
+
+    price_key = data["price_key"]
+    quantity = data["quantity"]
+
+    set_setting(
+        price_key,
+        str(price)
+    )
+
+    await message.answer(
+        f"✅ Цена для тарифа {quantity} шт. изменена: {price} USDT"
+    )
+
+    await state.clear()
+
 async def change_price_start(
     callback: CallbackQuery,
     state: FSMContext
