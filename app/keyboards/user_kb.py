@@ -5,13 +5,13 @@ buy_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
             InlineKeyboardButton(
-                text="💳 Купить 1 строку",
+                text="💳 Купить 1 ЛК",
                 callback_data="buy_1"
             )
         ],
         [
             InlineKeyboardButton(
-                text="💳 Купить 10 строк",
+                text="💳 Купить 10 ЛК",
                 callback_data="buy_10"
             )
         ]

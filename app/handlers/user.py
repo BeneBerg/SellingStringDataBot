@@ -13,7 +13,8 @@ from app.services.database import (
     add_invoice,
     get_invoice_from_db,
     mark_invoice_paid,
-    mark_invoice_delivered
+    mark_invoice_delivered,
+    add_partner_referral
 )
 
 from app.services.cryptobot import (
@@ -55,6 +56,19 @@ async def start_handler(message: Message):
         message.from_user.id,
         message.from_user.username
     )
+
+    args = message.text.split()
+
+    if len(args) > 1:
+            start_param = args[1]
+
+            if start_param.startswith("partner_"):
+                add_partner_referral(
+                    start_param,
+                    message.from_user.id,
+                    message.from_user.username,
+                    message.from_user.first_name
+                )
 
     if message.from_user.id in ADMINS:
         await message.answer(

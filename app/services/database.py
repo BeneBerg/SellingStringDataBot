@@ -9,6 +9,26 @@ os.makedirs("data", exist_ok=True)
 def connect():
     return sqlite3.connect(DB_PATH)
 
+def table_exists(cursor, table_name):
+    cursor.execute("""
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table'
+    AND name = ?
+    """, (table_name,))
+
+    return cursor.fetchone() is not None
+
+
+def column_exists(cursor, table_name, column_name):
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = cursor.fetchall()
+
+    for column in columns:
+        if column[1] == column_name:
+            return True
+
+    return False
 
 def init_db():
     conn = connect()
@@ -80,7 +100,7 @@ def init_db():
         'offer_text',
         'Перед оплатой ознакомьтесь с условиями оферты. После оплаты вы получаете лог + подробный мануал по восстановлению личного кабинета «Госуслуги» \n
 
-📌По любым вопросам обращаться - @GOS_support24\n\nНажимая кнопку «Принимаю», вы подтверждаете, что согласны с условиями покупки цифрового товара. После оплаты товар выдаётся автоматически и возврату не подлежит.'
+ 📌По любым вопросам обращаться - @GOS_support24\n\nНажимая кнопку «Принимаю», вы подтверждаете, что согласны с условиями покупки цифрового товара. После оплаты товар выдаётся автоматически и возврату не подлежит.'
     )
     """)
 
@@ -124,6 +144,17 @@ https://www.kody.su/
 После восстановления дождитесь окончания 72 часовой блокировки личного кабинета.
 
 Удачного пользования!'
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS partner_referrals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        referral_code TEXT,
+        telegram_id INTEGER UNIQUE,
+        username TEXT,
+        first_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
     conn.commit()
@@ -296,3 +327,238 @@ def mark_invoice_delivered(invoice_id):
 
     conn.commit()
     conn.close()
+
+def add_partner_referral(referral_code, telegram_id, username, first_name):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR IGNORE INTO partner_referrals (
+        referral_code,
+        telegram_id,
+        username,
+        first_name
+    )
+    VALUES (?, ?, ?, ?)
+    """, (
+        referral_code,
+        telegram_id,
+        username,
+        first_name
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def get_partner_referral_summary(referral_code):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT COUNT(*)
+    FROM partner_referrals
+    WHERE referral_code = ?
+    """, (referral_code,))
+
+    total_users = cursor.fetchone()[0]
+
+    cursor.execute("""
+    SELECT 
+        COUNT(p.id),
+        COALESCE(SUM(p.amount), 0)
+    FROM partner_referrals r
+    LEFT JOIN purchases p ON p.telegram_id = r.telegram_id
+    WHERE r.referral_code = ?
+    """, (referral_code,))
+
+    purchases_data = cursor.fetchone()
+
+    total_purchases = purchases_data[0]
+    total_amount = purchases_data[1]
+
+    conn.close()
+
+    return total_users, total_purchases, total_amount
+
+
+def get_partner_referral_users(referral_code):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT 
+        r.telegram_id,
+        r.username,
+        r.first_name,
+        r.created_at,
+        COUNT(p.id) AS purchases_count,
+        COALESCE(SUM(p.amount), 0) AS purchases_amount
+    FROM partner_referrals r
+    LEFT JOIN purchases p ON p.telegram_id = r.telegram_id
+    WHERE r.referral_code = ?
+    GROUP BY 
+        r.telegram_id,
+        r.username,
+        r.first_name,
+        r.created_at
+    ORDER BY r.created_at DESC
+    """, (referral_code,))
+
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    users = []
+
+    for row in rows:
+        users.append({
+            "telegram_id": row[0],
+            "username": row[1],
+            "first_name": row[2],
+            "created_at": row[3],
+            "purchases_count": row[4],
+            "purchases_amount": row[5]
+        })
+
+    return users
+
+def get_partner_referral_users_page(referral_code, page=1, per_page=15):
+    conn = connect()
+    cursor = conn.cursor()
+
+    offset = (page - 1) * per_page
+
+    cursor.execute("""
+    SELECT 
+        r.telegram_id,
+        r.username,
+        r.first_name,
+        r.created_at,
+        COUNT(p.id) AS purchases_count,
+        COALESCE(SUM(p.amount), 0) AS purchases_amount
+    FROM partner_referrals r
+    LEFT JOIN purchases p ON p.telegram_id = r.telegram_id
+    WHERE r.referral_code = ?
+    GROUP BY 
+        r.telegram_id,
+        r.username,
+        r.first_name,
+        r.created_at
+    ORDER BY r.created_at DESC
+    LIMIT ? OFFSET ?
+    """, (
+        referral_code,
+        per_page,
+        offset
+    ))
+
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    users = []
+
+    for row in rows:
+        users.append({
+            "telegram_id": row[0],
+            "username": row[1],
+            "first_name": row[2],
+            "created_at": row[3],
+            "purchases_count": row[4],
+            "purchases_amount": row[5]
+        })
+
+    return users
+
+
+def get_partner_referral_users_count(referral_code):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT COUNT(*)
+    FROM partner_referrals
+    WHERE referral_code = ?
+    """, (referral_code,))
+
+    count = cursor.fetchone()[0]
+
+    conn.close()
+
+    return count
+
+
+def get_partner_referral_user_detail(referral_code, telegram_id):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT 
+        r.telegram_id,
+        r.username,
+        r.first_name,
+        r.created_at,
+        COUNT(p.id) AS purchases_count,
+        COALESCE(SUM(p.amount), 0) AS purchases_amount
+    FROM partner_referrals r
+    LEFT JOIN purchases p ON p.telegram_id = r.telegram_id
+    WHERE r.referral_code = ?
+    AND r.telegram_id = ?
+    GROUP BY 
+        r.telegram_id,
+        r.username,
+        r.first_name,
+        r.created_at
+    """, (
+        referral_code,
+        telegram_id
+    ))
+
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        "telegram_id": row[0],
+        "username": row[1],
+        "first_name": row[2],
+        "created_at": row[3],
+        "purchases_count": row[4],
+        "purchases_amount": row[5]
+    }
+
+
+def get_partner_referral_user_purchases(telegram_id):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT 
+        id,
+        amount,
+        quantity,
+        created_at
+    FROM purchases
+    WHERE telegram_id = ?
+    ORDER BY created_at DESC
+    """, (telegram_id,))
+
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    purchases = []
+
+    for row in rows:
+        purchases.append({
+            "id": row[0],
+            "amount": row[1],
+            "quantity": row[2],
+            "created_at": row[3]
+        })
+
+    return purchases

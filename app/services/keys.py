@@ -33,3 +33,31 @@ def count_keys():
 
     with open(KEYS_FILE, "r", encoding="utf-8") as file:
         return len([line for line in file.readlines() if line.strip()])
+
+def clear_keys():
+    os.makedirs("data", exist_ok=True)
+
+    with open(KEYS_FILE, "w", encoding="utf-8") as file:
+        file.write("")
+
+def append_keys_from_text(text: str):
+    os.makedirs("data", exist_ok=True)
+
+    new_keys = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip()
+    ]
+
+    if not new_keys:
+        return 0
+
+    file_exists = os.path.exists(KEYS_FILE)
+
+    with open(KEYS_FILE, "a", encoding="utf-8") as file:
+        if file_exists and os.path.getsize(KEYS_FILE) > 0:
+            file.write("\n")
+
+        file.write("\n".join(new_keys))
+
+    return len(new_keys)
