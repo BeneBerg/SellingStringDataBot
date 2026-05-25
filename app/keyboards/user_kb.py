@@ -1,31 +1,58 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+from app.services.products import PRODUCTS
 
-buy_keyboard = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
+
+def products_keyboard():
+    keyboard = []
+
+    for product_code, product in PRODUCTS.items():
+        keyboard.append([
             InlineKeyboardButton(
-                text="💳 Купить 1 ЛК",
-                callback_data="buy_1"
+                text=product["title"],
+                callback_data=f"product:{product_code}"
             )
-        ],
-        [
-            InlineKeyboardButton(
-                text="💳 Купить 10 ЛК",
-                callback_data="buy_10"
-            )
+        ])
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=keyboard
+    )
+
+
+def product_tariffs_keyboard(product_code: str):
+    product = PRODUCTS[product_code]
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=product["button_1"],
+                    callback_data=f"buy:{product_code}:1"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=product["button_10"],
+                    callback_data=f"buy:{product_code}:10"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад к разделам",
+                    callback_data="back_to_products"
+                )
+            ]
         ]
-    ]
-)
+    )
 
 
-def offer_keyboard(quantity: int):
+def offer_keyboard(product_code: str, quantity: int):
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="✅ Принимаю",
-                    callback_data=f"accept_offer_{quantity}"
+                    callback_data=f"accept_offer:{product_code}:{quantity}"
                 )
             ],
             [
@@ -38,13 +65,13 @@ def offer_keyboard(quantity: int):
     )
 
 
-def check_payment_keyboard(invoice_id: int, quantity: int):
+def check_payment_keyboard(invoice_id: int):
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="✅ Проверить оплату",
-                    callback_data=f"check_{invoice_id}_{quantity}"
+                    callback_data=f"check:{invoice_id}"
                 )
             ]
         ]

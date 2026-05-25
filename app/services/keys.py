@@ -1,16 +1,22 @@
 import os
 
-KEYS_FILE = "data/keys.txt"
 
-
-def get_keys(count: int):
+def ensure_data_dir():
     os.makedirs("data", exist_ok=True)
 
-    if not os.path.exists(KEYS_FILE):
+
+def get_keys_from_file(file_path: str, count: int):
+    ensure_data_dir()
+
+    if not os.path.exists(file_path):
         return None
 
-    with open(KEYS_FILE, "r", encoding="utf-8") as file:
-        keys = [line.strip() for line in file.readlines() if line.strip()]
+    with open(file_path, "r", encoding="utf-8") as file:
+        keys = [
+            line.strip()
+            for line in file.readlines()
+            if line.strip()
+        ]
 
     if len(keys) < count:
         return None
@@ -18,7 +24,7 @@ def get_keys(count: int):
     selected_keys = keys[:count]
     remaining_keys = keys[count:]
 
-    with open(KEYS_FILE, "w", encoding="utf-8") as file:
+    with open(file_path, "w", encoding="utf-8") as file:
         file.write("\n".join(remaining_keys))
 
         if remaining_keys:
@@ -27,21 +33,22 @@ def get_keys(count: int):
     return selected_keys
 
 
-def count_keys():
-    if not os.path.exists(KEYS_FILE):
+def count_keys_in_file(file_path: str):
+    ensure_data_dir()
+
+    if not os.path.exists(file_path):
         return 0
 
-    with open(KEYS_FILE, "r", encoding="utf-8") as file:
-        return len([line for line in file.readlines() if line.strip()])
+    with open(file_path, "r", encoding="utf-8") as file:
+        return len([
+            line
+            for line in file.readlines()
+            if line.strip()
+        ])
 
-def clear_keys():
-    os.makedirs("data", exist_ok=True)
 
-    with open(KEYS_FILE, "w", encoding="utf-8") as file:
-        file.write("")
-
-def append_keys_from_text(text: str):
-    os.makedirs("data", exist_ok=True)
+def append_keys_to_file(file_path: str, text: str):
+    ensure_data_dir()
 
     new_keys = [
         line.strip()
@@ -52,12 +59,20 @@ def append_keys_from_text(text: str):
     if not new_keys:
         return 0
 
-    file_exists = os.path.exists(KEYS_FILE)
+    file_exists = os.path.exists(file_path)
+    file_has_content = file_exists and os.path.getsize(file_path) > 0
 
-    with open(KEYS_FILE, "a", encoding="utf-8") as file:
-        if file_exists and os.path.getsize(KEYS_FILE) > 0:
+    with open(file_path, "a", encoding="utf-8") as file:
+        if file_has_content:
             file.write("\n")
 
         file.write("\n".join(new_keys))
 
     return len(new_keys)
+
+
+def clear_keys_file(file_path: str):
+    ensure_data_dir()
+
+    with open(file_path, "w", encoding="utf-8") as file:
+        file.write("")

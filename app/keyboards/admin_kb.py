@@ -3,9 +3,10 @@ from aiogram.types import (
     KeyboardButton,
     ReplyKeyboardRemove,
     InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    
+    InlineKeyboardButton
 )
+
+from app.services.products import PRODUCTS
 
 
 admin_reply_keyboard = ReplyKeyboardMarkup(
@@ -15,7 +16,7 @@ admin_reply_keyboard = ReplyKeyboardMarkup(
             KeyboardButton(text="🔗 Партнёрка")
         ],
         [
-            KeyboardButton(text="💲 Цены"),
+            KeyboardButton(text="🛒 Разделы"),
             KeyboardButton(text="📝 Тексты")
         ],
         [
@@ -37,8 +38,62 @@ admin_reply_keyboard = ReplyKeyboardMarkup(
 remove_admin_keyboard = ReplyKeyboardRemove()
 
 
-texts_inline_keyboard = InlineKeyboardMarkup(
-    inline_keyboard=[
+def admin_products_keyboard(action: str):
+    keyboard = []
+
+    for product_code, product in PRODUCTS.items():
+        keyboard.append([
+            InlineKeyboardButton(
+                text=product["title"],
+                callback_data=f"{action}:{product_code}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=keyboard
+    )
+
+
+def clear_keys_confirm_keyboard(product_code: str):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Да, очистить",
+                    callback_data=f"confirm_clear_keys:{product_code}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="cancel_clear_keys"
+                )
+            ]
+        ]
+    )
+
+
+def admin_product_prices_keyboard(product_code: str):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💲 Цена за 1 строку",
+                    callback_data=f"admin_price:{product_code}:1"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💲 Цена за 10 строк",
+                    callback_data=f"admin_price:{product_code}:10"
+                )
+            ]
+        ]
+    )
+
+
+def texts_inline_keyboard():
+    keyboard = [
         [
             InlineKeyboardButton(
                 text="📝 Приветствие",
@@ -47,52 +102,23 @@ texts_inline_keyboard = InlineKeyboardMarkup(
         ],
         [
             InlineKeyboardButton(
-                text="📄 Оферта",
+                text="📄 Общая оферта",
                 callback_data="admin_text_offer"
             )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📘 Инструкция",
-                callback_data="admin_text_instruction"
-            )
         ]
     ]
-)
 
-clear_keys_confirm_keyboard = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
+    for product_code, product in PRODUCTS.items():
+        keyboard.append([
             InlineKeyboardButton(
-                text="✅ Да, очистить",
-                callback_data="confirm_clear_keys"
+                text=f"📘 Инструкция: {product['title']}",
+                callback_data=f"admin_instruction:{product_code}"
             )
-        ],
-        [
-            InlineKeyboardButton(
-                text="❌ Отмена",
-                callback_data="cancel_clear_keys"
-            )
-        ]
-    ]
-)
+        ])
 
-prices_inline_keyboard = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="💲 Цена за 1 строку",
-                callback_data="admin_price_1"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="💲 Цена за 10 строк",
-                callback_data="admin_price_10"
-            )
-        ]
-    ]
-)
+    return InlineKeyboardMarkup(
+        inline_keyboard=keyboard
+    )
 
 
 def partner_users_keyboard(users, page, total_pages):

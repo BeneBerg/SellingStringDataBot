@@ -30,6 +30,16 @@ def column_exists(cursor, table_name, column_name):
 
     return False
 
+def column_exists(cursor, table_name, column_name):
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = cursor.fetchall()
+
+    for column in columns:
+        if column[1] == column_name:
+            return True
+
+    return False
+
 def init_db():
     conn = connect()
     cursor = conn.cursor()
@@ -157,6 +167,115 @@ https://www.kody.su/
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    # purchases: добавляем товар и количество, если их ещё нет
+    if not column_exists(cursor, "purchases", "product_code"):
+        cursor.execute("""
+        ALTER TABLE purchases
+        ADD COLUMN product_code TEXT DEFAULT 'product_1'
+        """)
+
+    if not column_exists(cursor, "purchases", "quantity"):
+        cursor.execute("""
+        ALTER TABLE purchases
+        ADD COLUMN quantity INTEGER DEFAULT 1
+        """)
+
+    # invoices: если у тебя уже есть таблица invoices, расширяем её
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS invoices (
+        invoice_id INTEGER PRIMARY KEY,
+        telegram_id INTEGER,
+        product_code TEXT DEFAULT 'product_1',
+        quantity INTEGER DEFAULT 1,
+        amount REAL,
+        status TEXT DEFAULT 'created',
+        delivered INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    if not column_exists(cursor, "invoices", "product_code"):
+        cursor.execute("""
+        ALTER TABLE invoices
+        ADD COLUMN product_code TEXT DEFAULT 'product_1'
+        """)
+
+    if not column_exists(cursor, "invoices", "quantity"):
+        cursor.execute("""
+        ALTER TABLE invoices
+        ADD COLUMN quantity INTEGER DEFAULT 1
+        """)
+
+    if not column_exists(cursor, "invoices", "delivered"):
+        cursor.execute("""
+        ALTER TABLE invoices
+        ADD COLUMN delivered INTEGER DEFAULT 0
+        """)
+
+    # партнёрская таблица
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS partner_referrals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        referral_code TEXT,
+        telegram_id INTEGER UNIQUE,
+        username TEXT,
+        first_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    from app.services.products import PRODUCTS, get_price_setting_key, get_instruction_setting_key
+
+    for product_code, product in PRODUCTS.items():
+        cursor.execute("""
+        INSERT OR IGNORE INTO settings (key, value)
+        VALUES (?, ?)
+        """, (
+            get_price_setting_key(product_code, 1),
+            product["default_price_1"]
+        ))
+
+        cursor.execute("""
+        INSERT OR IGNORE INTO settings (key, value)
+        VALUES (?, ?)
+        """, (
+            get_price_setting_key(product_code, 10),
+            product["default_price_10"]
+        ))
+
+        cursor.execute("""
+        INSERT OR IGNORE INTO settings (key, value)
+        VALUES (?, ?)
+        """, (
+            get_instruction_setting_key(product_code),
+            product["default_instruction"]
+        ))
+
+        cursor.execute("""
+        SELECT value
+        FROM settings
+        WHERE key = 'instruction_text'
+        """)
+
+        old_instruction = cursor.fetchone()
+
+        if old_instruction:
+            old_instruction = old_instruction[0]
+
+            cursor.execute("""
+            SELECT value
+            FROM settings
+            WHERE key = 'product1_instruction'
+            """)
+
+            product_instruction = cursor.fetchone()
+
+            if not product_instruction:
+                cursor.execute("""
+                INSERT INTO settings (key, value)
+                VALUES ('product1_instruction', ?)
+                """, (old_instruction,))
     conn.commit()
     conn.close()
 
@@ -177,7 +296,7 @@ def add_user(telegram_id, username):
     conn.close()
 
 
-def add_purchase(telegram_id, license_keys, amount, quantity):
+def add_purchase(telegram_id, product_code, license_keys, amount, quantity):
     conn = connect()
     cursor = conn.cursor()
 
@@ -187,12 +306,19 @@ def add_purchase(telegram_id, license_keys, amount, quantity):
     cursor.execute("""
     INSERT INTO purchases (
         telegram_id,
+        product_code,
         license_key,
         amount,
         quantity
     )
-    VALUES (?, ?, ?, ?)
-    """, (telegram_id, license_keys, amount, quantity))
+    VALUES (?, ?, ?, ?, ?)
+    """, (
+        telegram_id,
+        product_code,
+        license_keys,
+        amount,
+        quantity
+    ))
 
     conn.commit()
     conn.close()
@@ -248,7 +374,7 @@ def get_setting(key, default=None):
 
     return default
 
-def add_invoice(invoice_id, telegram_id, quantity, amount):
+def add_invoice(invoice_id, telegram_id, product_code, quantity, amount):
     conn = connect()
     cursor = conn.cursor()
 
@@ -256,15 +382,17 @@ def add_invoice(invoice_id, telegram_id, quantity, amount):
     INSERT OR IGNORE INTO invoices (
         invoice_id,
         telegram_id,
+        product_code,
         quantity,
         amount,
         status,
         delivered
     )
-    VALUES (?, ?, ?, ?, 'created', 0)
+    VALUES (?, ?, ?, ?, ?, 'created', 0)
     """, (
         invoice_id,
         telegram_id,
+        product_code,
         quantity,
         amount
     ))
@@ -278,7 +406,14 @@ def get_invoice_from_db(invoice_id):
     cursor = conn.cursor()
 
     cursor.execute("""
-    SELECT invoice_id, telegram_id, quantity, amount, status, delivered
+    SELECT 
+        invoice_id,
+        telegram_id,
+        product_code,
+        quantity,
+        amount,
+        status,
+        delivered
     FROM invoices
     WHERE invoice_id = ?
     """, (invoice_id,))
@@ -293,10 +428,11 @@ def get_invoice_from_db(invoice_id):
     return {
         "invoice_id": row[0],
         "telegram_id": row[1],
-        "quantity": row[2],
-        "amount": row[3],
-        "status": row[4],
-        "delivered": row[5]
+        "product_code": row[2],
+        "quantity": row[3],
+        "amount": row[4],
+        "status": row[5],
+        "delivered": row[6]
     }
 
 
@@ -562,3 +698,35 @@ def get_partner_referral_user_purchases(telegram_id):
         })
 
     return purchases
+
+def migrate_old_instruction_to_product1():
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT value
+    FROM settings
+    WHERE key = 'instruction_text'
+    """)
+
+    old_instruction = cursor.fetchone()
+
+    if old_instruction:
+        old_instruction = old_instruction[0]
+
+        cursor.execute("""
+        SELECT value
+        FROM settings
+        WHERE key = 'product1_instruction'
+        """)
+
+        product_instruction = cursor.fetchone()
+
+        if not product_instruction:
+            cursor.execute("""
+            INSERT INTO settings (key, value)
+            VALUES ('product1_instruction', ?)
+            """, (old_instruction,))
+
+    conn.commit()
+    conn.close()

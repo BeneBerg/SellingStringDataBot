@@ -22,12 +22,22 @@ from app.services.cryptobot import (
     get_invoice
 )
 
-from app.services.keys import get_keys
+from app.services.keys import (
+    get_keys_from_file,
+    count_keys_in_file
+)
 
 from app.keyboards.user_kb import (
-    buy_keyboard,
+    products_keyboard,
+    product_tariffs_keyboard,
     offer_keyboard,
     check_payment_keyboard
+)
+
+from app.services.products import (
+    get_product,
+    get_price_setting_key,
+    get_instruction_setting_key
 )
 
 ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
@@ -40,15 +50,6 @@ ADMINS = [
 router = Router()
 
 
-def get_price_by_quantity(quantity: int) -> float:
-    if quantity == 1:
-        return float(get_setting("price_1", "20"))
-
-    if quantity == 10:
-        return float(get_setting("price_10", "150"))
-
-    raise ValueError("Некорректное количество")
-
 
 @router.message(CommandStart())
 async def start_handler(message: Message):
@@ -60,15 +61,15 @@ async def start_handler(message: Message):
     args = message.text.split()
 
     if len(args) > 1:
-            start_param = args[1]
+        start_param = args[1]
 
-            if start_param.startswith("partner_"):
-                add_partner_referral(
-                    start_param,
-                    message.from_user.id,
-                    message.from_user.username,
-                    message.from_user.first_name
-                )
+        if start_param.startswith("partner_"):
+            add_partner_referral(
+                start_param,
+                message.from_user.id,
+                message.from_user.username,
+                message.from_user.first_name
+            )
 
     if message.from_user.id in ADMINS:
         await message.answer(
@@ -79,18 +80,81 @@ async def start_handler(message: Message):
 
     text = get_setting(
         "welcome_text",
-        "Добро пожаловать.\n\nВыберите нужный вариант покупки."
+        "Добро пожаловать.\n\nВыберите раздел для покупки."
     )
 
     await message.answer(
         text,
-        reply_markup=buy_keyboard
+        reply_markup=products_keyboard()
     )
 
+@router.callback_query(lambda c: c.data == "back_to_products")
+async def back_to_products(callback: CallbackQuery):
+    text = get_setting(
+        "welcome_text",
+        "Добро пожаловать.\n\nВыберите раздел для покупки."
+    )
 
-@router.callback_query(lambda c: c.data in ["buy_1", "buy_10"])
+    await callback.message.edit_text(
+        text,
+        reply_markup=products_keyboard()
+    )
+
+    await callback.answer()
+
+@router.callback_query(lambda c: c.data.startswith("product:"))
+async def product_handler(callback: CallbackQuery):
+    product_code = callback.data.split(":")[1]
+
+    product = get_product(product_code)
+
+    if not product:
+        await callback.answer(
+            "Раздел не найден",
+            show_alert=True
+        )
+        return
+
+    await callback.message.edit_text(
+        f"Вы выбрали: {product['title']}\n\n"
+        f"Выберите вариант покупки:",
+        reply_markup=product_tariffs_keyboard(product_code)
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data.startswith("buy:"))
 async def buy_handler(callback: CallbackQuery):
-    quantity = int(callback.data.split("_")[1])
+    _, product_code, quantity = callback.data.split(":")
+    quantity = int(quantity)
+
+    product = get_product(product_code)
+
+    if not product:
+        await callback.answer(
+            "Раздел не найден",
+            show_alert=True
+        )
+        return
+
+    available_count = count_keys_in_file(product["file"])
+
+    if available_count <= 0:
+        await callback.answer(
+            "❌ В данный момент товар отсутствует",
+            show_alert=True
+        )
+        return
+
+    if available_count < quantity:
+        await callback.answer(
+            f"❌ Недостаточно товара.\n\n"
+            f"Доступно: {available_count}\n"
+            f"Вы выбрали: {quantity}",
+            show_alert=True
+        )
+        return
 
     offer_text = get_setting(
         "offer_text",
@@ -98,24 +162,36 @@ async def buy_handler(callback: CallbackQuery):
     )
 
     await callback.message.answer(
-        offer_text,
-        reply_markup=offer_keyboard(quantity)
+        f"{offer_text}\n\n"
+        f"Раздел: {product['title']}\n"
+        f"Количество строк: {quantity}",
+        reply_markup=offer_keyboard(product_code, quantity)
     )
 
     await callback.answer()
 
-@router.callback_query(lambda c: c.data == "cancel_offer")
-async def cancel_offer(callback: CallbackQuery):
-    await callback.message.answer(
-        "Покупка отменена."
-    )
-
-    await callback.answer()
-
-@router.callback_query(lambda c: c.data.startswith("accept_offer_"))
+@router.callback_query(lambda c: c.data.startswith("accept_offer:"))
 async def accept_offer_handler(callback: CallbackQuery):
-    quantity = int(callback.data.split("_")[2])
-    price = get_price_by_quantity(quantity)
+    _, product_code, quantity = callback.data.split(":")
+    quantity = int(quantity)
+
+    product = get_product(product_code)
+
+    if not product:
+        await callback.answer(
+            "Раздел не найден",
+            show_alert=True
+        )
+        return
+
+    price_key = get_price_setting_key(product_code, quantity)
+
+    price = float(
+        get_setting(
+            price_key,
+            product[f"default_price_{quantity}"]
+        )
+    )
 
     invoice = await create_invoice(
         price,
@@ -137,26 +213,26 @@ async def accept_offer_handler(callback: CallbackQuery):
     add_invoice(
         invoice_id,
         callback.from_user.id,
+        product_code,
         quantity,
         price
     )
 
     await callback.message.answer(
         f"💳 Оплатите заказ\n\n"
+        f"Раздел: {product['title']}\n"
         f"Количество: {quantity}\n"
         f"Сумма: {price} USDT\n\n"
         f"{pay_url}",
-        reply_markup=check_payment_keyboard(invoice_id, quantity)
+        reply_markup=check_payment_keyboard(invoice_id)
     )
 
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("check_"))
+@router.callback_query(lambda c: c.data.startswith("check:") or c.data.startswith("check_"))
 async def check_payment(callback: CallbackQuery):
-    parts = callback.data.split("_")
-
-    invoice_id = int(parts[1])
+    invoice_id = int(callback.data.split(":")[1])
 
     invoice_db = get_invoice_from_db(invoice_id)
 
@@ -213,20 +289,35 @@ async def check_payment(callback: CallbackQuery):
         )
         return
 
+    product_code = invoice_db["product_code"]
     quantity = invoice_db["quantity"]
     amount = invoice_db["amount"]
 
-    keys = get_keys(quantity)
+    product = get_product(product_code)
+
+    if not product:
+        await callback.message.answer(
+            "❌ Раздел не найден. Обратитесь к администратору."
+        )
+        await callback.answer()
+        return
+
+    keys = get_keys_from_file(
+        product["file"],
+        quantity
+    )
 
     if not keys:
         await callback.message.answer(
-            f"❌ Недостаточно строк в файле. Нужно: {quantity}"
+            f"❌ Недостаточно строк в разделе «{product['title']}».\n"
+            f"Нужно строк: {quantity}"
         )
         await callback.answer()
         return
 
     add_purchase(
         callback.from_user.id,
+        product_code,
         keys,
         amount,
         quantity
@@ -235,15 +326,16 @@ async def check_payment(callback: CallbackQuery):
     mark_invoice_paid(invoice_id)
     mark_invoice_delivered(invoice_id)
 
-    keys_text = "\n".join(keys)
-
     instruction_text = get_setting(
-        "instruction_text",
-        "Инструкция:\n\nСкопируйте полученные данные и используйте их по назначению."
+        get_instruction_setting_key(product_code),
+        product["default_instruction"]
     )
+
+    keys_text = "\n".join(keys)
 
     await callback.message.answer(
         f"✅ Оплата подтверждена\n\n"
+        f"Раздел: {product['title']}\n\n"
         f"Ваши данные:\n\n"
         f"<code>{keys_text}</code>\n\n"
         f"{instruction_text}"
