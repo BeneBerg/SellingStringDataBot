@@ -19,20 +19,20 @@ def products_keyboard():
     )
 
 
-def product_tariffs_keyboard(product_code: str):
+def product_tariffs_keyboard(product_code: str, price_1, price_10):
     product = PRODUCTS[product_code]
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=product["button_1"],
+                    text=f"{product['button_1']} ({price_1} USDT)",
                     callback_data=f"buy:{product_code}:1"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=product["button_10"],
+                    text=f"{product['button_10']} ({price_10} USDT)",
                     callback_data=f"buy:{product_code}:10"
                 )
             ],

@@ -1,27 +1,11 @@
 PRODUCTS = {
-    "product1": {
-        "title": "ЛК",
-        "file": "data/keys.txt",
+    
+    "product2": {
+        "title": "ГУ под сим МЕГАФОН",
+        "file": "data/keys_megafon.txt",
 
         "button_1": "💳 Купить 1 ЛК",
         "button_10": "💳 Купить 10 ЛК",
-
-        "default_price_1": "20",
-        "default_price_10": "150",
-
-        "default_instruction": (
-            "Инструкция для ЛК:\n\n"
-            "1. Скопируйте полученные строки.\n"
-            "2. Используйте их согласно инструкции для ЛК."
-        )
-    },
-
-    "product2": {
-        "title": "Мегафон логи",
-        "file": "data/keys_megafon.txt",
-
-        "button_1": "💳 Купить 1 лог мегафон",
-        "button_10": "💳 Купить 10 логов мегафон",
 
         "default_price_1": "20",
         "default_price_10": "150",
@@ -34,11 +18,11 @@ PRODUCTS = {
     },
 
     "product3": {
-        "title": "Yota логи",
+        "title": "ГУ под сим YOTA",
         "file": "data/keys_yota.txt",
 
-        "button_1": "💳 Купить лог Yota",
-        "button_10": "💳 Купить 10 логов Yota",
+        "button_1": "💳 Купить 1 ЛК",
+        "button_10": "💳 Купить 10 ЛК",
 
         "default_price_1": "20",
         "default_price_10": "150",

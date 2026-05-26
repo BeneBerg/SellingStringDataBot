@@ -115,10 +115,27 @@ async def product_handler(callback: CallbackQuery):
         )
         return
 
+    price_1_key = get_price_setting_key(product_code, 1)
+    price_10_key = get_price_setting_key(product_code, 10)
+
+    price_1 = get_setting(
+        price_1_key,
+        product["default_price_1"]
+    )
+
+    price_10 = get_setting(
+        price_10_key,
+        product["default_price_10"]
+    )
+
     await callback.message.edit_text(
         f"Вы выбрали: {product['title']}\n\n"
         f"Выберите вариант покупки:",
-        reply_markup=product_tariffs_keyboard(product_code)
+        reply_markup=product_tariffs_keyboard(
+            product_code,
+            price_1,
+            price_10
+        )
     )
 
     await callback.answer()
@@ -166,6 +183,14 @@ async def buy_handler(callback: CallbackQuery):
         f"Раздел: {product['title']}\n"
         f"Количество строк: {quantity}",
         reply_markup=offer_keyboard(product_code, quantity)
+    )
+
+    await callback.answer()
+
+@router.callback_query(lambda c: c.data == "cancel_offer")
+async def cancel_offer(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "❌ Покупка отменена."
     )
 
     await callback.answer()
