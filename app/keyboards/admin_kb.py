@@ -186,3 +186,124 @@ def partner_user_detail_keyboard(page):
             ]
         ]
     )
+
+def referral_link_keyboard(page, total_pages, referral_code):
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="➕ Добавить",
+                callback_data="ref_add"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="👥 Пользователи",
+                callback_data=f"ref_users:{referral_code}:1"
+            )
+        ]
+    ]
+
+    navigation_buttons = []
+
+    if page > 1:
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=f"ref_page:{page - 1}"
+            )
+        )
+
+    navigation_buttons.append(
+        InlineKeyboardButton(
+            text=f"{page}/{total_pages}",
+            callback_data="ref_page_info"
+        )
+    )
+
+    if page < total_pages:
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="➡️ Далее",
+                callback_data=f"ref_page:{page + 1}"
+            )
+        )
+
+    buttons.append(navigation_buttons)
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=buttons
+    )
+
+
+def referral_users_keyboard(users, referral_code, page, total_pages, referral_page):
+    buttons = []
+
+    for user in users:
+        telegram_id = user["telegram_id"]
+        username = user.get("username")
+        first_name = user.get("first_name")
+
+        if username:
+            button_text = f"@{username}"
+        elif first_name:
+            button_text = first_name
+        else:
+            button_text = str(telegram_id)
+
+        buttons.append([
+            InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"ref_user:{referral_code}:{telegram_id}:{page}:{referral_page}"
+            )
+        ])
+
+    navigation_buttons = []
+
+    if page > 1:
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=f"ref_users:{referral_code}:{page - 1}:{referral_page}"
+            )
+        )
+
+    navigation_buttons.append(
+        InlineKeyboardButton(
+            text=f"{page}/{total_pages}",
+            callback_data="ref_users_page_info"
+        )
+    )
+
+    if page < total_pages:
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="➡️ Далее",
+                callback_data=f"ref_users:{referral_code}:{page + 1}:{referral_page}"
+            )
+        )
+
+    buttons.append(navigation_buttons)
+
+    buttons.append([
+        InlineKeyboardButton(
+            text="⬅️ Назад к рефералке",
+            callback_data=f"ref_page:{referral_page}"
+        )
+    ])
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=buttons
+    )
+
+
+def referral_user_detail_keyboard(referral_code, users_page, referral_page):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад к пользователям",
+                    callback_data=f"ref_users:{referral_code}:{users_page}:{referral_page}"
+                )
+            ]
+        ]
+    )

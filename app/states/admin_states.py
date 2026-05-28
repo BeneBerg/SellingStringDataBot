@@ -7,3 +7,4 @@ class AdminStates(StatesGroup):
     waiting_for_welcome = State()
     waiting_for_offer = State()
     waiting_for_instruction = State()
+    waiting_for_referral_title = State()

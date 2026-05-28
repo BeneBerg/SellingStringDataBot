@@ -14,7 +14,10 @@ from app.keyboards.admin_kb import (
     admin_product_prices_keyboard,
     clear_keys_confirm_keyboard,
     partner_users_keyboard,
-    partner_user_detail_keyboard
+    partner_user_detail_keyboard,
+    referral_link_keyboard,
+    referral_users_keyboard,
+    referral_user_detail_keyboard
 )
 from app.states.admin_states import AdminStates
 
@@ -26,7 +29,11 @@ from app.services.database import (
     get_partner_referral_users_page,
     get_partner_referral_users_count,
     get_partner_referral_user_detail,
-    get_partner_referral_user_purchases
+    get_partner_referral_user_purchases,
+    create_referral_link,
+    get_referral_links_count,
+    get_referral_link_by_page,
+    get_referral_link_by_code
 )
 
 from app.services.keys import (
@@ -46,8 +53,8 @@ from app.services.products import (
 
 router = Router()
 
-PARTNER_REFERRAL_CODE = "partner_main"
 PARTNER_USERS_PER_PAGE = 15
+REFERRAL_USERS_PER_PAGE = 15
 
 ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
 
@@ -71,55 +78,7 @@ async def admin_stats(message: Message):
         f"💳 Покупок: {purchases}"
     )
 
-@router.message(lambda message: message.text == "🔗 Партнёрка")
-async def partner_menu_handler(message: Message):
-    if message.from_user.id not in ADMINS:
-        return
 
-    bot_info = await message.bot.get_me()
-
-    link = (
-        f"https://t.me/{bot_info.username}"
-        f"?start={PARTNER_REFERRAL_CODE}"
-    )
-
-    total_users, total_purchases, total_amount = get_partner_referral_summary(
-        PARTNER_REFERRAL_CODE
-    )
-
-    users_count = get_partner_referral_users_count(
-        PARTNER_REFERRAL_CODE
-    )
-
-    total_pages = max(
-        1,
-        math.ceil(users_count / PARTNER_USERS_PER_PAGE)
-    )
-
-    users = get_partner_referral_users_page(
-        PARTNER_REFERRAL_CODE,
-        page=1,
-        per_page=PARTNER_USERS_PER_PAGE
-    )
-
-    text = (
-        f"🔗 Партнёрская ссылка:\n\n"
-        f"{link}\n\n"
-        f"📊 Статистика по ссылке:\n\n"
-        f"👥 Перешло пользователей: {total_users}\n"
-        f"💳 Всего покупок: {total_purchases}\n"
-        f"💰 Общая сумма: {total_amount} USDT\n\n"
-        f"Ниже список пользователей по страницам."
-    )
-
-    await message.answer(
-        text,
-        reply_markup=partner_users_keyboard(
-            users,
-            page=1,
-            total_pages=total_pages
-        )
-    )
 
 @router.message(lambda message: message.text == "🛒 Разделы")
 async def admin_products_menu(message: Message):
@@ -156,63 +115,7 @@ async def admin_product_prices_menu(
 
     await callback.answer()
 
-@router.callback_query(lambda callback: callback.data.startswith("partner_page_"))
-async def partner_page_handler(callback: CallbackQuery):
-    if callback.from_user.id not in ADMINS:
-        return
 
-    if callback.data == "partner_page_info":
-        await callback.answer()
-        return
-
-    page = int(callback.data.split("_")[2])
-
-    total_users, total_purchases, total_amount = get_partner_referral_summary(
-        PARTNER_REFERRAL_CODE
-    )
-
-    users_count = get_partner_referral_users_count(
-        PARTNER_REFERRAL_CODE
-    )
-
-    total_pages = max(
-        1,
-        math.ceil(users_count / PARTNER_USERS_PER_PAGE)
-    )
-
-    users = get_partner_referral_users_page(
-        PARTNER_REFERRAL_CODE,
-        page=page,
-        per_page=PARTNER_USERS_PER_PAGE
-    )
-
-    bot_info = await callback.bot.get_me()
-
-    link = (
-        f"https://t.me/{bot_info.username}"
-        f"?start={PARTNER_REFERRAL_CODE}"
-    )
-
-    text = (
-        f"🔗 Партнёрская ссылка:\n\n"
-        f"{link}\n\n"
-        f"📊 Статистика по ссылке:\n\n"
-        f"👥 Перешло пользователей: {total_users}\n"
-        f"💳 Всего покупок: {total_purchases}\n"
-        f"💰 Общая сумма: {total_amount} USDT\n\n"
-        f"Страница {page} из {total_pages}."
-    )
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=partner_users_keyboard(
-            users,
-            page=page,
-            total_pages=total_pages
-        )
-    )
-
-    await callback.answer()
 
 @router.message(lambda message: message.text == "🔑 Остаток строк")
 async def admin_keys(message: Message):
@@ -228,70 +131,7 @@ async def admin_keys(message: Message):
 
     await message.answer(text)
 
-@router.callback_query(lambda callback: callback.data.startswith("partner_user_"))
-async def partner_user_detail_handler(callback: CallbackQuery):
-    if callback.from_user.id not in ADMINS:
-        return
 
-    parts = callback.data.split("_")
-
-    telegram_id = int(parts[2])
-    page = int(parts[3])
-
-    user = get_partner_referral_user_detail(
-        PARTNER_REFERRAL_CODE,
-        telegram_id
-    )
-
-    if not user:
-        await callback.answer(
-            "Пользователь не найден",
-            show_alert=True
-        )
-        return
-
-    purchases = get_partner_referral_user_purchases(
-        telegram_id
-    )
-
-    username = user["username"]
-    first_name = user["first_name"]
-
-    if username:
-        user_display = f"@{username}"
-    elif first_name:
-        user_display = first_name
-    else:
-        user_display = str(telegram_id)
-
-    text = (
-        f"👤 Пользователь партнёрской ссылки\n\n"
-        f"Пользователь: {user_display}\n"
-        f"ID: <code>{telegram_id}</code>\n"
-        f"Дата перехода: {user['created_at']}\n\n"
-        f"💳 Покупок: {user['purchases_count']}\n"
-        f"💰 Сумма покупок: {user['purchases_amount']} USDT\n\n"
-    )
-
-    if purchases:
-        text += "🧾 Последние покупки:\n\n"
-
-        for purchase in purchases[:10]:
-            text += (
-                f"• Покупка #{purchase['id']}\n"
-                f"  Количество: {purchase['quantity']}\n"
-                f"  Сумма: {purchase['amount']} USDT\n"
-                f"  Дата: {purchase['created_at']}\n\n"
-            )
-    else:
-        text += "Покупок пока нет."
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=partner_user_detail_keyboard(page)
-    )
-
-    await callback.answer()
 
 @router.message(lambda message: message.text == "📝 Тексты")
 async def admin_texts_menu(message: Message):
@@ -766,6 +606,301 @@ async def cancel_clear_keys(callback: CallbackQuery):
 
     await callback.message.edit_text(
         "❌ Очистка файла отменена."
+    )
+
+    await callback.answer()
+
+
+
+async def show_referral_page(message_or_callback, page):
+    total_links = get_referral_links_count()
+
+    if total_links <= 0:
+        text = (
+            "🔗 Реферальные ссылки\n\n"
+            "Пока нет ни одной реферальной ссылки."
+        )
+
+        if isinstance(message_or_callback, Message):
+            await message_or_callback.answer(text)
+        else:
+            await message_or_callback.message.edit_text(text)
+
+        return
+
+    total_pages = total_links
+
+    if page < 1:
+        page = 1
+
+    if page > total_pages:
+        page = total_pages
+
+    referral = get_referral_link_by_page(page)
+
+    if not referral:
+        return
+
+    referral_code = referral["referral_code"]
+
+    total_users, total_purchases, total_amount = get_partner_referral_summary(
+        referral_code
+    )
+
+    if isinstance(message_or_callback, Message):
+        bot_info = await message_or_callback.bot.get_me()
+    else:
+        bot_info = await message_or_callback.bot.get_me()
+
+    link = f"https://t.me/{bot_info.username}?start={referral_code}"
+
+    text = (
+        f"🔗 Реферальная ссылка\n\n"
+        f"Название: <b>{referral['title']}</b>\n"
+        f"Код: <code>{referral_code}</code>\n\n"
+        f"{link}\n\n"
+        f"📊 Статистика:\n\n"
+        f"👥 Перешло пользователей: {total_users}\n"
+        f"💳 Всего покупок: {total_purchases}\n"
+        f"💰 Общая сумма: {total_amount} USDT\n\n"
+        f"Страница {page} из {total_pages}"
+    )
+
+    keyboard = referral_link_keyboard(
+        page,
+        total_pages,
+        referral_code
+    )
+
+    if isinstance(message_or_callback, Message):
+        await message_or_callback.answer(
+            text,
+            reply_markup=keyboard
+        )
+    else:
+        await message_or_callback.message.edit_text(
+            text,
+            reply_markup=keyboard
+        )
+
+
+@router.message(lambda message: message.text == "🔗 Партнёрка")
+async def referrals_menu_handler(message: Message):
+    if message.from_user.id not in ADMINS:
+        return
+
+    await show_referral_page(message, 1)
+
+@router.callback_query(lambda callback: callback.data.startswith("ref_page:"))
+async def referral_page_handler(callback: CallbackQuery):
+    if callback.from_user.id not in ADMINS:
+        return
+
+    page = int(callback.data.split(":")[1])
+
+    await show_referral_page(callback, page)
+
+    await callback.answer()
+
+
+@router.callback_query(lambda callback: callback.data == "ref_page_info")
+async def referral_page_info(callback: CallbackQuery):
+    await callback.answer()
+
+@router.callback_query(lambda callback: callback.data == "ref_add")
+async def referral_add_start(
+    callback: CallbackQuery,
+    state: FSMContext
+):
+    if callback.from_user.id not in ADMINS:
+        return
+
+    await state.set_state(
+        AdminStates.waiting_for_referral_title
+    )
+
+    await callback.message.answer(
+        "➕ Введите название новой реферальной ссылки.\n\n"
+        "Например:\n"
+        "Партнёр Иван\n"
+        "Telegram-канал"
+    )
+
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_for_referral_title)
+async def referral_add_save(
+    message: Message,
+    state: FSMContext
+):
+    if message.from_user.id not in ADMINS:
+        return
+
+    title = message.text.strip()
+
+    if not title:
+        await message.answer(
+            "Название не может быть пустым. Введите название рефералки."
+        )
+        return
+
+    referral_code = create_referral_link(title)
+
+    bot_info = await message.bot.get_me()
+
+    link = f"https://t.me/{bot_info.username}?start={referral_code}"
+
+    await message.answer(
+        f"✅ Реферальная ссылка создана\n\n"
+        f"Название: <b>{title}</b>\n"
+        f"Код: <code>{referral_code}</code>\n\n"
+        f"{link}"
+    )
+
+    await state.clear()
+
+@router.callback_query(lambda callback: callback.data.startswith("ref_users:"))
+async def referral_users_handler(callback: CallbackQuery):
+    if callback.from_user.id not in ADMINS:
+        return
+
+    parts = callback.data.split(":")
+
+    referral_code = parts[1]
+    users_page = int(parts[2])
+
+    if len(parts) >= 4:
+        referral_page = int(parts[3])
+    else:
+        referral_page = 1
+
+    referral = get_referral_link_by_code(referral_code)
+
+    if not referral:
+        await callback.answer(
+            "Рефералка не найдена",
+            show_alert=True
+        )
+        return
+
+    users_count = get_partner_referral_users_count(
+        referral_code
+    )
+
+    total_pages = max(
+        1,
+        math.ceil(users_count / REFERRAL_USERS_PER_PAGE)
+    )
+
+    users = get_partner_referral_users_page(
+        referral_code,
+        page=users_page,
+        per_page=REFERRAL_USERS_PER_PAGE
+    )
+
+    text = (
+        f"👥 Пользователи рефералки\n\n"
+        f"Название: <b>{referral['title']}</b>\n"
+        f"Код: <code>{referral_code}</code>\n\n"
+        f"Всего пользователей: {users_count}\n"
+        f"Страница {users_page} из {total_pages}"
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=referral_users_keyboard(
+            users,
+            referral_code,
+            users_page,
+            total_pages,
+            referral_page
+        )
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(lambda callback: callback.data == "ref_users_page_info")
+async def referral_users_page_info(callback: CallbackQuery):
+    await callback.answer()
+
+@router.callback_query(lambda callback: callback.data.startswith("ref_user:"))
+async def referral_user_detail_handler(callback: CallbackQuery):
+    if callback.from_user.id not in ADMINS:
+        return
+
+    _, referral_code, telegram_id, users_page, referral_page = callback.data.split(":")
+
+    telegram_id = int(telegram_id)
+    users_page = int(users_page)
+    referral_page = int(referral_page)
+
+    referral = get_referral_link_by_code(referral_code)
+
+    if not referral:
+        await callback.answer(
+            "Рефералка не найдена",
+            show_alert=True
+        )
+        return
+
+    user = get_partner_referral_user_detail(
+        referral_code,
+        telegram_id
+    )
+
+    if not user:
+        await callback.answer(
+            "Пользователь не найден",
+            show_alert=True
+        )
+        return
+
+    purchases = get_partner_referral_user_purchases(
+        telegram_id
+    )
+
+    username = user["username"]
+    first_name = user["first_name"]
+
+    if username:
+        user_display = f"@{username}"
+    elif first_name:
+        user_display = first_name
+    else:
+        user_display = str(telegram_id)
+
+    text = (
+        f"👤 Пользователь рефералки\n\n"
+        f"Рефералка: <b>{referral['title']}</b>\n"
+        f"Пользователь: {user_display}\n"
+        f"ID: <code>{telegram_id}</code>\n"
+        f"Дата перехода: {user['created_at']}\n\n"
+        f"💳 Покупок: {user['purchases_count']}\n"
+        f"💰 Сумма покупок: {user['purchases_amount']} USDT\n\n"
+    )
+
+    if purchases:
+        text += "🧾 Последние покупки:\n\n"
+
+        for purchase in purchases[:10]:
+            text += (
+                f"• Покупка #{purchase['id']}\n"
+                f"  Количество: {purchase['quantity']}\n"
+                f"  Сумма: {purchase['amount']} USDT\n"
+                f"  Дата: {purchase['created_at']}\n\n"
+            )
+    else:
+        text += "Покупок пока нет."
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=referral_user_detail_keyboard(
+            referral_code,
+            users_page,
+            referral_page
+        )
     )
 
     await callback.answer()

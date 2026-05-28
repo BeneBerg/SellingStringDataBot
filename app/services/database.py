@@ -276,6 +276,27 @@ https://www.kody.su/
                 INSERT INTO settings (key, value)
                 VALUES ('product1_instruction', ?)
                 """, (old_instruction,))
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS referral_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            referral_code TEXT UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+
+        cursor.execute("""
+        INSERT OR IGNORE INTO referral_links (
+            title,
+            referral_code
+        )
+        VALUES (
+            'Основная рефералка',
+            'partner_main'
+        )
+        """)
+
     conn.commit()
     conn.close()
 
@@ -730,3 +751,97 @@ def migrate_old_instruction_to_product1():
 
     conn.commit()
     conn.close()
+
+import time
+
+
+def create_referral_link(title):
+    conn = connect()
+    cursor = conn.cursor()
+
+    referral_code = f"partner_{int(time.time())}"
+
+    cursor.execute("""
+    INSERT INTO referral_links (
+        title,
+        referral_code
+    )
+    VALUES (?, ?)
+    """, (
+        title,
+        referral_code
+    ))
+
+    conn.commit()
+    conn.close()
+
+    return referral_code
+
+
+def get_referral_links_count():
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT COUNT(*)
+    FROM referral_links
+    """)
+
+    count = cursor.fetchone()[0]
+
+    conn.close()
+
+    return count
+
+
+def get_referral_link_by_page(page):
+    conn = connect()
+    cursor = conn.cursor()
+
+    offset = page - 1
+
+    cursor.execute("""
+    SELECT id, title, referral_code, created_at
+    FROM referral_links
+    ORDER BY id ASC
+    LIMIT 1 OFFSET ?
+    """, (offset,))
+
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        "id": row[0],
+        "title": row[1],
+        "referral_code": row[2],
+        "created_at": row[3]
+    }
+
+
+def get_referral_link_by_code(referral_code):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT id, title, referral_code, created_at
+    FROM referral_links
+    WHERE referral_code = ?
+    """, (referral_code,))
+
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        "id": row[0],
+        "title": row[1],
+        "referral_code": row[2],
+        "created_at": row[3]
+    }
