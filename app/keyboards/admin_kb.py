@@ -104,13 +104,13 @@ def admin_product_prices_keyboard(product_code: str):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💲 Цена за 1 строку",
+                    text="💲 Цена за 1 ЛК",
                     callback_data=f"admin_price:{product_code}:1"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="💲 Цена за 10 строк",
+                    text="💲 Цена за 10 ЛК",
                     callback_data=f"admin_price:{product_code}:10"
                 )
             ]
