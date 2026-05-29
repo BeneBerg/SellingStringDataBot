@@ -24,7 +24,8 @@ admin_reply_keyboard = ReplyKeyboardMarkup(
             KeyboardButton(text="🔑 Остаток строк")
         ],
         [
-            KeyboardButton(text="🗑 Очистить строки")
+            KeyboardButton(text="🗑 Очистить строки"),
+            KeyboardButton(text="🔄 Обновление")
         ],
         [
             KeyboardButton(text="❌ Закрыть админку")
@@ -51,6 +52,31 @@ def admin_products_keyboard(action: str):
 
     return InlineKeyboardMarkup(
         inline_keyboard=keyboard
+    )
+
+def update_available_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить",
+                    callback_data="update_bot"
+                )
+            ]
+        ]
+    )
+
+
+def update_notification_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔄 Обновить",
+                    callback_data="update_bot"
+                )
+            ]
+        ]
     )
 
 

@@ -6,6 +6,10 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 
+from app.services.updater import (
+    check_updates,
+    start_update_in_background
+)
 
 from app.keyboards.admin_kb import (
     remove_admin_keyboard,
@@ -17,7 +21,8 @@ from app.keyboards.admin_kb import (
     partner_user_detail_keyboard,
     referral_link_keyboard,
     referral_users_keyboard,
-    referral_user_detail_keyboard
+    referral_user_detail_keyboard,
+    update_available_keyboard
 )
 from app.states.admin_states import AdminStates
 
@@ -901,6 +906,87 @@ async def referral_user_detail_handler(callback: CallbackQuery):
             users_page,
             referral_page
         )
+    )
+
+    await callback.answer()
+
+@router.message(lambda message: message.text == "🔄 Обновление")
+async def update_check_handler(message: Message):
+    if message.from_user.id not in ADMINS:
+        return
+
+    update_info = check_updates()
+
+    if not update_info["ok"]:
+        await message.answer(
+            f"❌ Не удалось проверить обновления.\n\n"
+            f"<code>{update_info['error']}</code>"
+        )
+        return
+
+    if not update_info["has_update"]:
+        current_commit = update_info.get("current_commit")
+
+        text = "✅ Обновлений нет.\n\n"
+
+        if current_commit:
+            text += (
+                f"Текущая версия:\n"
+                f"<code>{current_commit['hash']}</code> — "
+                f"{current_commit['message']}"
+            )
+
+        await message.answer(text)
+        return
+
+    remote_commit = update_info["remote_commit"]
+
+    await message.answer(
+        f"🔔 Доступно обновление\n\n"
+        f"Новых коммитов: {update_info['behind_count']}\n\n"
+        f"Последний коммит:\n"
+        f"<code>{remote_commit['hash']}</code> — {remote_commit['message']}\n\n"
+        f"Можно обновить бота.",
+        reply_markup=update_available_keyboard()
+    )
+
+@router.callback_query(lambda callback: callback.data == "update_bot")
+async def update_bot_handler(callback: CallbackQuery):
+    if callback.from_user.id not in ADMINS:
+        await callback.answer(
+            "Нет доступа",
+            show_alert=True
+        )
+        return
+
+    update_info = check_updates()
+
+    if not update_info["ok"]:
+        await callback.message.answer(
+            f"❌ Не удалось проверить обновления.\n\n"
+            f"<code>{update_info['error']}</code>"
+        )
+        await callback.answer()
+        return
+
+    if not update_info["has_update"]:
+        await callback.message.answer(
+            "✅ Обновлений нет. Бот уже на актуальной версии."
+        )
+        await callback.answer()
+        return
+
+    remote_commit = update_info["remote_commit"]
+
+    log_file = start_update_in_background()
+
+    await callback.message.answer(
+        f"🔄 Обновление запущено.\n\n"
+        f"Будет установлен коммит:\n"
+        f"<code>{remote_commit['hash']}</code> — {remote_commit['message']}\n\n"
+        f"Бот перезапустится автоматически.\n\n"
+        f"Лог обновления на сервере:\n"
+        f"<code>{log_file}</code>"
     )
 
     await callback.answer()
